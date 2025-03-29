@@ -6,6 +6,35 @@ param (
     [Alias("dp")][int]$Depth = [int]::MaxValue
 )
 
+function Should-IncludeItem {
+    param (
+        [System.IO.FileSystemInfo]$Item,
+        [string[]]$Exclude,
+        [switch]$DirsOnly
+    )
+
+    foreach ($ex in $Exclude) {
+        if ($Item.Name -like $ex) {
+            return $false
+        }
+    }
+
+    if ($DirsOnly -and -not $Item.PSIsContainer) {
+        return $false
+    }
+
+    return $true
+}
+
+function Format-TreeLine {
+    param (
+        [System.IO.FileSystemInfo]$Item,
+        [int]$Indent
+    )
+
+    $prefix = ("│   " * $Indent) + "├── "
+    return "$prefix$($Item.Name)"
+}
 
 function Collect-Tree {
     param (
@@ -24,31 +53,23 @@ function Collect-Tree {
     }
 
     try {
-        $items = Get-ChildItem -LiteralPath $Path -Force:$ShowHidden | Where-Object {
-            $name = $_.Name
-
-            foreach ($ex in $Exclude) {
-                if ($name -like $ex) { return $false }
-            }
-
-            if ($DirsOnly -and -not $_.PSIsContainer) {
-                return $false
-            }
-
-            return $true
-        }
-
-        foreach ($item in $items) {
-            $prefix = ("│   " * $Indent) + "├── "
-            $result += "$prefix$($item.Name)"
-
-            if ($item.PSIsContainer) {
-                $result += Collect-Tree -Path $item.FullName -Indent ($Indent + 1) -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
-            }
-        }
+        $items = Get-ChildItem -LiteralPath $Path -Force:$ShowHidden
     }
     catch {
-        $result += "Error reading path '$Path': $_"
+        Write-Warning "경로 '$Path'를 읽는 도중 오류 발생: $_"
+        return $result
+    }
+
+    $filteredItems = $items | Where-Object {
+        Should-IncludeItem -Item $_ -Exclude $Exclude -DirsOnly:$DirsOnly
+    }
+
+    foreach ($item in $filteredItems) {
+        $result += Format-TreeLine -Item $item -Indent $Indent
+
+        if ($item.PSIsContainer) {
+            $result += Collect-Tree -Path $item.FullName -Indent ($Indent + 1) -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
+        }
     }
 
     return $result
