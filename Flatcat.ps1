@@ -14,7 +14,10 @@ param(
 
     # 새 파라미터: 출력 방식 지정 (stdout 또는 copy)
     [ValidateSet('stdout', 'copy')]
-    [string]$Output = 'stdout'
+    [string]$Output = 'stdout',
+
+    # 새 파라미터: 중첩 디렉토리 탐색 여부 지정
+    [switch]$Nested
 )
 
 # --- 유틸리티 함수들 ---
@@ -108,9 +111,17 @@ function Format-FileContent {
 function Get-FilteredFiles {
     param(
         [string]$DirectoryPath,
-        [string]$FilterRegex
+        [string]$FilterRegex,
+        [switch]$Recurse
     )
-    $files = Get-ChildItem -Path $DirectoryPath -File -ErrorAction Stop
+    $getChileItemParams = @{
+        Path        = $DirectoryPath
+        File        = $true
+        ErrorAction = 'Stop'
+        Recurse     = $Recurse.IsPresent
+    }
+    $files = Get-ChildItem @getChileItemParams
+
     if ($FilterRegex) {
         $files = $files | Where-Object { $_.Name -match $FilterRegex }
     }
@@ -121,21 +132,31 @@ function Format-DirectoryContent {
     param(
         [string]$DirectoryPath,
         [string]$FilterRegex,
-        [string]$FormatType
+        [string]$FormatType,
+        [switch]$Nested
     )
     if (-not (Test-Path $DirectoryPath -PathType Container)) {
         return "Error: Directory not found: $DirectoryPath"
     }
 
     try {
-        $files = Get-FilteredFiles -DirectoryPath $DirectoryPath -FilterRegex $FilterRegex
+        $files = Get-FilteredFiles -DirectoryPath $DirectoryPath -FilterRegex $FilterRegex -Recurse:$Nested
         $count = $files.Count
         
         if ($count -eq 0) {
-            $message = "No files found in '$DirectoryPath'"
+            $relativePath = Get-RelativePath -Path $DirectoryPath
+            $message = "No files found in '$relativePath'"
             if ($FilterRegex) {
                 $message += " (matching regex '$FilterRegex')"
             }
+            
+            if (-not $Nested.IsPresent) {
+                $subDirs = Get-ChildItem -Path $DirectoryPath -Directory -ErrorAction SilentlyContinue
+                if ($subDirs) {
+                    $message += ". Try using the -Nested option to include files in subdirectories."
+                }
+            }
+
             return $message + [System.Environment]::NewLine
         }
 
@@ -158,12 +179,13 @@ function Format-DirectoryContent {
 # --- 도움말 출력 함수 ---
 function Show-Help {
     Write-Host "Usage:"
-    Write-Host "  flatcat <path> [-regex 'pattern'] [-format plain|md] [-output stdout|copy]"
-    Write-Host "  flatcat -dir <directory_path> [-regex 'pattern'] [-format plain|md] [-output stdout|copy]"
+    Write-Host "  flatcat <path> [-regex 'pattern'] [-format plain|md] [-output stdout|copy] [-nested]"
+    Write-Host "  flatcat -dir <directory_path> [-regex 'pattern'] [-format plain|md] [-output stdout|copy] [-nested]"
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  -format plain|md   Specify output format (default: plain)"
     Write-Host "  -output stdout|copy  Specify output destination (default: stdout)"
+    Write-Host "  -nested            Include files in nested directories"
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  flatcat ./myfile.txt"
@@ -180,7 +202,7 @@ $helpDisplayed = $false
 try {
     if ($Path) {
         if (Test-Path $Path -PathType Container) {
-            $finalOutputString = Format-DirectoryContent -DirectoryPath $Path -FilterRegex $Regex -FormatType $Format
+            $finalOutputString = Format-DirectoryContent -DirectoryPath $Path -FilterRegex $Regex -FormatType $Format -Nested:$Nested
             if ($finalOutputString.StartsWith("Error:")) {
                 Write-Error $finalOutputString.Substring(7)
                 $errorOccurred = $true
@@ -196,7 +218,7 @@ try {
         }
     }
     elseif ($Dir) {
-        $finalOutputString = Format-DirectoryContent -DirectoryPath $Dir -FilterRegex $Regex -FormatType $Format
+        $finalOutputString = Format-DirectoryContent -DirectoryPath $Dir -FilterRegex $Regex -FormatType $Format -Nested:$Nested
         if ($finalOutputString.StartsWith("Error:")) {
             Write-Error $finalOutputString.Substring(7)
             $errorOccurred = $true
