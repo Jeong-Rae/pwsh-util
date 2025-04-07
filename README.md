@@ -25,14 +25,6 @@ PowerShell 기반의 유틸리티 모음입니다.
 ptree [옵션]
 ```
 
-```powershell
-ptree                          # 현재 경로 이하 전체 트리
-ptree -x node_modules,dist     # 제외 항목 설정
-ptree -d                       # 디렉토리만
-ptree -h                       # 숨김 항목 포함
-ptree -D 2                     # 2 계층까지
-```
-
 ### 옵션
 
 | 옵션          | 축약  | 설명                      |
@@ -44,6 +36,22 @@ ptree -D 2                     # 2 계층까지
 | `-Depth`      | `-dp` | 출력 깊이 제한            |
 
 > 출력 항목이 100줄 이상이면, 사용자에게 Y/N 입력을 요청합니다.
+
+### 출력 예시
+
+```powershell
+# 현재 디렉토리 구조 출력
+PS C:\Script> ptree
+├── .git
+│   ├── ... (생략)
+├── Flatcat.ps1
+├── README.md
+└── PTree.ps1
+
+# 디렉토리만 2단계 깊이까지 출력
+PS C:\Script> ptree -d -dp 2
+└── .git
+```
 
 ---
 
@@ -70,15 +78,6 @@ flatcat <디렉토리경로> [-Nested] [옵션]
 flatcat -dir <디렉토리경로> [-Nested] [옵션]
 ```
 
-```powershell
-flatcat ./myfile.txt                        # 단일 파일 출력
-flatcat ./mydir                            # 디렉토리 내 파일 출력 (하위 디렉토리 제외)
-flatcat ./mydir -Nested                    # 디렉토리 내 모든 파일 출력 (하위 디렉토리 포함)
-flatcat ./mydir -regex '\.js$' -Nested     # js 파일만 필터링하여 출력 (하위 디렉토리 포함)
-flatcat ./mydir -format md                 # 마크다운 형식으로 출력
-flatcat ./mydir -output copy               # 출력 결과를 클립보드에 복사
-```
-
 ### 옵션
 
 | 옵션      | 설명                                                    |
@@ -92,30 +91,108 @@ flatcat ./mydir -output copy               # 출력 결과를 클립보드에 �
 
 > `-Nested` 옵션 없이 디렉토리를 지정했을 때 해당 디렉토리에 파일이 없고 하위 디렉토리만 존재하면, `-Nested` 옵션을 사용하라는 안내 메시지가 출력됩니다.
 
+### 출력 예시
+
+가상 디렉토리 구조:
+
+```
+./example/
+├── file1.txt
+├── script.ps1
+└── sub/
+    └── file2.log
+```
+
+파일 내용:
+
+-   `file1.txt`: `Hello`
+-   `script.ps1`: `$var = "World"`
+-   `file2.log`: `Log message`
+
+#### 단일 파일 출력
+
+```
+PS C:\Script> flatcat ./example/file1.txt
+
+// example\file1.txt
+Hello
+```
+
+#### 디렉토리 출력
+
+```
+PS C:\Script> flatcat ./example
+
+// example\file1.txt
+Hello
+---
+
+// example\script.ps1
+$var = "World"
+```
+
+#### 디렉토리 출력 (-Nested 사용)
+
+```
+PS C:\Script> flatcat ./example -Nested
+
+// example\file1.txt
+Hello
+---
+
+// example\script.ps1
+$var = "World"
+---
+
+// example\sub\file2.log
+Log message
+```
+
+#### Markdown 포맷 및 Regex 필터링
+
+```
+PS C:\Script> flatcat ./example -Nested -Format md -Regex '\.txt$'
+
+# example\file1.txt
+
+\`\`\`txt
+Hello
+\`\`\`
+```
+
+#### `.log` 파일만 클립보드로 복사
+
+```
+PS C:\Script> flatcat ./example -Regex '\.log$' -Output copy
+
+// example\sub\file2.log
+Log message
+
+-- Content copied to clipboard --
+```
+
 ### 출력 포맷
 
-#### Plain 텍스트 (기본)
+#### Plain 텍스트
 
 파일 경로와 내용을 주석 형태로 표시합니다:
 
 ```
 // ./myfile.txt
 파일 내용...
+
 ```
 
 #### Markdown 포맷
 
 파일 경로를 헤더로, 내용을 코드 블록으로 포맷합니다:
 
-````markdown
+```markdown
 # ./myfile.txt
 
-```js
+\`\`\`js
 파일 내용...
-```
-````
-
+\`\`\`
 ```
 
 > 파일 확장자에 따라 적절한 언어 구문 강조 코드 블록을 자동으로 생성합니다.
-```
