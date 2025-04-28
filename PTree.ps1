@@ -6,7 +6,7 @@ param (
     [Alias("dp")][int]$Depth = [int]::MaxValue
 )
 
-function Should-IncludeItem {
+function Test-IncludeItem {
     param (
         [System.IO.FileSystemInfo]$Item,
         [string[]]$Exclude,
@@ -36,7 +36,7 @@ function Format-TreeLine {
     return "$prefix$($Item.Name)"
 }
 
-function Collect-Tree {
+function Get-Tree {
     param (
         [string]$Path,
         [int]$Indent = 0,
@@ -46,45 +46,49 @@ function Collect-Tree {
         [int]$Depth
     )
 
-    $result = @()
+    $resultLines = @()
+    $itemCount = 0
 
     if ($Indent -ge $Depth) {
-        return $result
+        return @{ Lines = $resultLines; ItemCount = $itemCount }
     }
 
     try {
         $items = Get-ChildItem -LiteralPath $Path -Force:$ShowHidden
     }
     catch {
-        Write-Warning "경로 '$Path'를 읽는 도중 오류 발생: $_"
-        return $result
+        Write-Warning "Error reading path '$Path': $_"
+        return @{ Lines = $resultLines; ItemCount = $itemCount }
     }
 
     $filteredItems = $items | Where-Object {
-        Should-IncludeItem -Item $_ -Exclude $Exclude -DirsOnly:$DirsOnly
+        Test-IncludeItem -Item $_ -Exclude $Exclude -DirsOnly:$DirsOnly
     }
 
     foreach ($item in $filteredItems) {
-        $result += Format-TreeLine -Item $item -Indent $Indent
+        $resultLines += Format-TreeLine -Item $item -Indent $Indent
+        $itemCount++
 
         if ($item.PSIsContainer) {
-            $result += Collect-Tree -Path $item.FullName -Indent ($Indent + 1) -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
+            $recursiveResult = Get-Tree -Path $item.FullName -Indent ($Indent + 1) -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
+            $resultLines += $recursiveResult.Lines
+            $itemCount += $recursiveResult.ItemCount
         }
     }
 
-    return $result
+    return @{ Lines = $resultLines; ItemCount = $itemCount }
 }
 
 # 실행 진입점
-$lines = Collect-Tree -Path $Path -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
+$treeOutput = Get-Tree -Path $Path -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
 
-if ($lines.Count -ge 100) {
-    Write-Host "출력 줄 수가 $($lines.Count)줄입니다. 계속하시겠습니까? [Y/N]" -ForegroundColor Yellow
+if ($treeOutput.ItemCount -ge 200) {
+    Write-Host "The number of items to display is $($treeOutput.ItemCount). Continue? [Y/N]" -ForegroundColor Yellow
     $response = Read-Host
     if ($response -notin @("Y", "y")) {
-        Write-Host "출력을 취소했습니다."
+        Write-Host "Output cancelled."
         exit
     }
 }
 
-$lines | ForEach-Object { Write-Host $_ }
+$treeOutput.Lines | ForEach-Object { Write-Host $_ }
