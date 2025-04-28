@@ -9,15 +9,8 @@ param (
 function Test-IncludeItem {
     param (
         [System.IO.FileSystemInfo]$Item,
-        [string[]]$Exclude,
         [switch]$DirsOnly
     )
-
-    foreach ($ex in $Exclude) {
-        if ($Item.Name -like $ex) {
-            return $false
-        }
-    }
 
     if ($DirsOnly -and -not $Item.PSIsContainer) {
         return $false
@@ -54,7 +47,7 @@ function Get-Tree {
     }
 
     try {
-        $items = Get-ChildItem -LiteralPath $Path -Force:$ShowHidden
+        $items = Get-ChildItem -LiteralPath $Path -Force:$ShowHidden -Exclude $Exclude
     }
     catch {
         Write-Warning "Error reading path '$Path': $_"
@@ -62,7 +55,7 @@ function Get-Tree {
     }
 
     $filteredItems = $items | Where-Object {
-        Test-IncludeItem -Item $_ -Exclude $Exclude -DirsOnly:$DirsOnly
+        Test-IncludeItem -Item $_ -DirsOnly:$DirsOnly
     }
 
     foreach ($item in $filteredItems) {
@@ -80,7 +73,18 @@ function Get-Tree {
 }
 
 # 실행 진입점
-$treeOutput = Get-Tree -Path $Path -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
+try {
+    $resolvedPath = Resolve-Path -LiteralPath $Path -ErrorAction SilentlyContinue
+    if ($null -eq $resolvedPath) {
+        throw "Path not found or inaccessible: $Path"
+    }
+}
+catch {
+    Write-Warning "The specified path '$Path' does not exist or could not be accessed."
+    exit 1
+}
+
+$treeOutput = Get-Tree -Path $resolvedPath.ProviderPath -Exclude $Exclude -DirsOnly:$DirsOnly -ShowHidden:$ShowHidden -Depth:$Depth
 
 if ($treeOutput.ItemCount -ge 200) {
     Write-Host "The number of items to display is $($treeOutput.ItemCount). Continue? [Y/N]" -ForegroundColor Yellow
@@ -91,4 +95,4 @@ if ($treeOutput.ItemCount -ge 200) {
     }
 }
 
-$treeOutput.Lines | ForEach-Object { Write-Host $_ }
+$treeOutput.Lines
